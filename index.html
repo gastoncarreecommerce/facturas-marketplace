@@ -10,9 +10,8 @@
       --ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--accent:#60a5fa
     }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--tx);
-      font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:940px;margin:28px auto;padding:16px}
+    body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{max-width:980px;margin:28px auto;padding:16px}
     h1{font-size:22px;margin:0 0 6px}
     p{color:var(--muted);margin:6px 0 16px}
     .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:16px}
@@ -25,7 +24,7 @@
     .btn.small{padding:6px 10px;font-size:12px}
     input[type=file]{display:none}
     label.file{border:1px dashed #3b475b;border-radius:10px;padding:12px 14px;cursor:pointer;color:var(--muted)}
-    .log{max-height:380px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220;white-space:normal}
+    .log{max-height:420px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220}
     .item{display:flex;align-items:flex-start;gap:10px;padding:10px;border-bottom:1px solid #142036}
     .item:last-child{border-bottom:0}
     .badge{font-size:11px;padding:2px 8px;border-radius:999px}
@@ -34,10 +33,8 @@
     .err{background:#2a0a0a;color:#fca5a5}
     code{background:#0b1323;border:1px solid #1f2a42;padding:2px 6px;border-radius:6px}
     .hint{font-size:12px;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
-    .regex{width:100%;background:#0b1323;border:1px solid #1f2a42;color:var(--tx);
-      padding:8px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
     .mono{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
 
     /* ===== Loader "aguantá flaca" ===== */
     .loader-backdrop{
@@ -56,10 +53,9 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .loader h2{margin:0;font-size:16px}
     .loader p{margin:0;font-size:13px;color:#97a5bd}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
   </style>
 
-  <!-- librerías client-side -->
+  <!-- libs client-side -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -79,37 +75,18 @@
     <h1>Renombrar Facturas PDF (Cliente + Nro)</h1>
     <p>Subí varios PDFs; detectamos <em>Cliente</em> y <em>Nro</em> y te bajamos un .zip con nombres <code>Cliente - 4444-00652748.pdf</code>. Todo sucede <strong>en tu navegador</strong>.</p>
 
-    <!-- Patrones -->
     <div class="card" style="margin-bottom:12px">
-      <div class="grid">
-        <div><div class="hint">Patrones (podés ajustarlos). Se usa la <em>primera coincidencia</em> de cada grupo.</div></div>
-        <div class="toolbar">
-          <button class="btn small" id="resetPat">Restaurar</button>
-          <button class="btn small" id="toggleDebug">Ver texto extraído</button>
-        </div>
-      </div>
-      <div style="margin-top:10px;display:grid;gap:8px">
-        <label>Cliente (regex con grupo <code>?&lt;cliente&gt;</code>)</label>
-        <textarea id="reCliente" class="regex" rows="5"></textarea>
-
-        <label>Número de factura (regex con grupo <code>?&lt;num&gt;</code>)</label>
-        <textarea id="reNumero" class="regex" rows="4"></textarea>
-      </div>
-    </div>
-
-    <!-- Acciones -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="row">
+      <div class="toolbar">
         <label class="file">
           <input type="file" id="fileInput" accept="application/pdf" multiple />
           Seleccionar PDFs…
         </label>
         <button class="btn primary" id="runBtn" disabled>Procesar y descargar .zip</button>
+        <button class="btn small" id="debugBtn">Ver texto extraído (1º archivo)</button>
         <span id="status" class="hint"></span>
       </div>
     </div>
 
-    <!-- Resultados -->
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <strong>Resultados</strong>
@@ -128,26 +105,8 @@
     const $ = s => document.querySelector(s);
     const logEl = $('#log'), statusEl = $('#status'), sumEl = $('#summary');
     const runBtn = $('#runBtn'), inp = $('#fileInput'), loader = $('#loader');
-    const reClienteTA = $('#reCliente'), reNumeroTA = $('#reNumero'), resetPat = $('#resetPat');
-    const debugBox = $('#debugBox'), debugText = $('#debugText'), toggleDebug = $('#toggleDebug');
+    const debugBtn = $('#debugBtn'), debugBox = $('#debugBox'), debugText = $('#debugText');
 
-    toggleDebug.addEventListener('click', () => {
-      debugBox.style.display = debugBox.style.display === 'none' ? 'block' : 'none';
-    });
-
-    // Defaults afinados (cortan antes de IVA/Domicilio/CUIT si vienen pegados)
-    const DEFAULT_CLIENTE = [
-      '(?i)\\bCliente\\b[:\\s]+(?P<cliente>.+?)(?=\\s+(?:IVA:|Domicilio:|CUIT[:\\s]|C\\.U\\.I\\.T\\.:)|$)',
-      '(?i)\\bSres?\\.?\\b[:\\s]+(?P<cliente>[^\\r\\n]+)',
-      '(?i)Raz[oó]n\\s+Social[:\\s]+(?P<cliente>[^\\r\\n]+)'
-    ].join('\\n');
-
-    const DEFAULT_NUMERO = [
-      '(?i)\\bN(?:ro|[°º])\\.?\\b[:\\s]+(?P<num>\\d{4}\\s*[-–—]\\s*\\d{6,10})',
-      '(?i)\\bFactura\\s*[ABC]?\\s*(?:N(?:ro|[°º])\\.?)?\\s*[:\\s]+(?P<num>\\d{4}\\s*[-–—]\\s*\\d{6,10})'
-    ].join('\\n');
-
-    // Estado de archivos
     let files = [];
     inp.addEventListener('change', () => {
       files = Array.from(inp.files || []);
@@ -156,75 +115,162 @@
       logEl.innerHTML = ''; statusEl.textContent = ''; debugText.textContent = ''; debugBox.style.display='none';
     });
 
-    resetPat.addEventListener('click', () => {
-      reClienteTA.value = DEFAULT_CLIENTE;
-      reNumeroTA.value  = DEFAULT_NUMERO;
+    debugBtn.addEventListener('click', async () => {
+      if (!files.length) return;
+      const dump = await extractDebugDump(files[0]);
+      debugText.textContent = dump;
+      debugBox.style.display = 'block';
+      debugBox.open = true;
     });
 
-    // Inicializa defaults al abrir
-    reClienteTA.value = DEFAULT_CLIENTE;
-    reNumeroTA.value  = DEFAULT_NUMERO;
-
-    // ===== pdf.js =====
+    // ===== pdf.js config =====
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // Estrategia A: concatenar ítems
-    async function pdfToText_A(file) {
+    // ===== Utilidades =====
+    const ANCHORS = [
+      'iva','domicilio','cuit','c.u.i.t.','cuit/cuil/dni','c.p.','c.p.:','cta.','condiciones','fecha','hoja','factura','nro','n°','nº'
+    ];
+    const RE_NUM = /(\d{4})\s*[-–—]\s*(\d{6,10})/; // 4444-00652708 etc.
+
+    const norm = s => (s||'').toLowerCase()
+      .replace(/[.:;,]/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    function sanitize(name, maxLen=120) {
+      let s = (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+      if (s.length > maxLen) s = s.slice(0, maxLen).trim();
+      return s;
+    }
+
+    // Agrupa items por línea usando coordenada Y (tolerancia)
+    function groupByLines(items, yTol=2.0) {
+      const pts = items.map(it => ({str:it.str, x:it.transform[4], y:it.transform[5]}))
+                       .filter(w => w.str && w.str.trim().length);
+      pts.sort((a,b) => b.y - a.y || a.x - b.x); // de arriba a abajo, izq->der
+      const lines = [];
+      for (const w of pts) {
+        let line = lines.find(L => Math.abs(L.y - w.y) <= yTol);
+        if (!line) { line = { y:w.y, tokens:[] }; lines.push(line); }
+        line.tokens.push({t:w.str, x:w.x});
+      }
+      // ordenar tokens por X
+      for (const L of lines) {
+        L.tokens.sort((a,b) => a.x - b.x);
+        L.text = L.tokens.map(t => t.t).join(' ');
+      }
+      // volver arriba->abajo (ya lo está) y limpiar
+      return lines;
+    }
+
+    // Tokeniza una línea en palabras conservando el X aproximado
+    function explodeTokens(line) {
+      const toks = [];
+      for (const el of line.tokens) {
+        const parts = el.t.split(/\s+/).filter(Boolean);
+        for (let i=0;i<parts.length;i++) toks.push({t:parts[i], x:el.x + i*2});
+      }
+      return toks;
+    }
+
+    function findCliente(lines) {
+      for (let i=0;i<lines.length;i++) {
+        const L = lines[i];
+        const toks = explodeTokens(L);
+        for (let j=0;j<toks.length;j++) {
+          const tok = norm(toks[j].t);
+          if (tok === 'cliente') {
+            // tomar lo que viene a la derecha misma línea hasta ancla
+            const nameParts = [];
+            for (let k=j+1; k<toks.length; k++) {
+              const tk = toks[k].t;
+              const n = norm(tk);
+              if (n === ':' || n === '') continue;
+              if (ANCHORS.includes(n) || ANCHORS.some(a => n.startsWith(a))) break;
+              nameParts.push(tk);
+            }
+            let name = nameParts.join(' ').trim();
+            // Si quedó vacío (o solo ':'), probamos en la línea siguiente
+            if (!name || name === ':') {
+              const next = lines[i+1];
+              if (next) {
+                const ntoks = explodeTokens(next);
+                const nParts = [];
+                for (let k=0;k<ntoks.length;k++) {
+                  const nrm = norm(ntoks[k].t);
+                  if (ANCHORS.includes(nrm) || ANCHORS.some(a => nrm.startsWith(a))) break;
+                  nParts.push(ntoks[k].t);
+                }
+                name = nParts.join(' ').trim();
+              }
+            }
+            // Limpieza: cortar si dentro asoma ancla intermedia
+            name = name.replace(/\s+(IVA:|Domicilio:|CUIT[:\s]|C\.U\.I\.T\.:).*$/i,'').trim();
+            if (name) return name;
+          }
+        }
+        // fallback: la línea contiene "Cliente ..." seguido del nombre en el mismo string
+        const m = /Cliente\s+(.+?)(?=\s+(IVA:|Domicilio:|CUIT|C\.U\.I\.T\.|Cta\.|C\.P\.|$))/i.exec(L.text);
+        if (m && m[1]) return m[1].trim();
+      }
+      return null;
+    }
+
+    function findNro(lines) {
+      // 1) buscar línea con etiqueta Nro / N° / Nº
+      for (const L of lines) {
+        const hasLabel = /\bN(?:ro|[°º])\.?\s*:?/i.test(L.text) || /\bFactura\b/i.test(L.text);
+        if (hasLabel) {
+          const m = RE_NUM.exec(L.text);
+          if (m) return `${m[1]}-${m[2]}`;
+        }
+      }
+      // 2) si no, buscar la primera línea con un número estilo 0000-000000
+      for (const L of lines) {
+        const m = RE_NUM.exec(L.text);
+        if (m) return `${m[1]}-${m[2]}`;
+      }
+      return null;
+    }
+
+    async function parseOneFile(file, dumpFirst=false) {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let allText = [];
+      let linesAll = [];
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        const lines = groupByLines(tc.items);
+        linesAll.push(...lines);
+        allText.push(lines.map(L => L.text).join('\n'));
+      }
+      const cliente = findCliente(linesAll);
+      const nro = findNro(linesAll);
+      const dump = allText.join('\n');
+
+      if (dumpFirst) {
+        debugText.textContent = dump;
+        debugBox.style.display = 'block';
+        debugBox.open = true;
+      }
+      return { cliente, nro };
+    }
+
+    async function extractDebugDump(file) {
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
       let out = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
-        const txt = await page.getTextContent();
-        out.push(txt.items.map(it => it.str).join(' '));
+        const tc = await page.getTextContent();
+        const lines = groupByLines(tc.items);
+        out.push(lines.map(L => L.text).join('\n'));
       }
       return out.join('\n');
     }
 
-    // Estrategia B: forzar saltos antes de anclas típicas
-    function massageTextForAnchors(text) {
-      const anchors = ['IVA:', 'Domicilio:', 'CUIT', 'C.U.I.T.:', 'Cta.:', 'Fecha:', 'Nro', 'N°', 'Nº'];
-      const re = new RegExp('(?:\\s+)(' + anchors.map(a => a.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')).join('|') + ')','g');
-      return text.replace(re, '\n$1');
-    }
-
-    async function pdfToText(file) {
-      // A
-      let text = await pdfToText_A(file);
-      // B (plan B “permisivo”)
-      const textB = massageTextForAnchors(text);
-      return {textA: text, textB};
-    }
-
-    // ===== Regex =====
-    function compilePatterns(multiline) {
-      const lines = multiline.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      const regs = [];
-      for (const line of lines) {
-        const hasCaseI = line.startsWith('(?i)');
-        const pattern = hasCaseI ? line.replace('(?i)', '') : line;
-        try { regs.push(new RegExp(pattern, hasCaseI ? 'i' : '')); }
-        catch(e){ console.warn('Regex inválida:', line, e); }
-      }
-      return regs;
-    }
-    function firstMatch(text, regs, groupName) {
-      for (const r of regs) {
-        const m = r.exec(text);
-        if (m) {
-          let val = (m.groups && m.groups[groupName]) ? m.groups[groupName] : (m[1] || '');
-          val = (val || '').split(/\r?\n/)[0].trim().replace(/^[-:\\s]+/, '');
-          if (val) return val;
-        }
-      }
-      return null;
-    }
-    function sanitize(name, maxLen=100) {
-      let s = name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
-      if (s.length > maxLen) s = s.slice(0, maxLen).trim();
-      return s;
-    }
     function logRow(type, original, message) {
       const div = document.createElement('div');
       div.className = 'item';
@@ -237,7 +283,7 @@
       logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
     }
 
-    // ===== Proceso =====
+    // ===== Proceso principal =====
     async function processAll() {
       if (!files.length) return;
 
@@ -245,43 +291,21 @@
       loader.style.display = 'flex';
       runBtn.disabled = true; logEl.innerHTML = ''; statusEl.textContent = 'Leyendo PDFs…'; sumEl.textContent = '';
 
-      const cliRegs = compilePatterns(reClienteTA.value);
-      const numRegs = compilePatterns(reNumeroTA.value);
-      let ok = 0, fail = 0;
+      let ok = 0, fail = 0, dumped = false;
       const zip = new JSZip();
-
-      let firstDebugDumped = false;
 
       for (const f of files) {
         try {
-          const {textA, textB} = await pdfToText(f);
+          const { cliente, nro } = await parseOneFile(f, !dumped);
+          dumped = true;
 
-          // Primero intentamos contra textB (con anclas y saltos)
-          let cliente = firstMatch(textB, cliRegs, 'cliente');
-          let numero  = firstMatch(textB, numRegs, 'num');
-
-          // Fallback: probamos también contra textA “crudo”
-          if (!cliente || !numero) {
-            const c2 = firstMatch(textA, cliRegs, 'cliente');
-            const n2 = firstMatch(textA, numRegs, 'num');
-            cliente = cliente || c2;
-            numero  = numero  || n2;
-          }
-
-          // Dump de debug del primer archivo procesado
-          if (!firstDebugDumped) {
-            debugText.textContent = `=== Texto (con anclas) ===\n${textB}\n\n=== Texto (crudo) ===\n${textA}`;
-            debugBox.style.display = 'block';
-            firstDebugDumped = true;
-          }
-
-          if (!cliente || !numero) {
-            fail++; logRow('skip', f.name, 'No se pudo extraer Cliente y/o Nro');
+          if (!cliente || !nro) {
+            fail++; logRow('skip', f.name, 'No se pudo extraer Cliente y/o Nro (¿PDF escaneado?)');
             continue;
           }
-          const newName = `${sanitize(cliente)} - ${sanitize(numero)}.pdf`;
-          const buf = await f.arrayBuffer();
-          zip.file(newName, buf);
+          const newName = `${sanitize(cliente)} - ${sanitize(nro)}.pdf`;
+          const ab = await f.arrayBuffer();
+          zip.file(newName, ab);
           ok++; logRow('ok', f.name, `→ ${newName}`);
         } catch (e) {
           fail++; logRow('err', f.name, String(e));
