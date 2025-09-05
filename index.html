@@ -2,24 +2,30 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Renombrar Facturas PDF (Cliente + Número)</title>
+  <title>Renombrar Facturas PDF (Cliente + Nro)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root{--bg:#0b0f16;--card:#111827;--muted:#9aa3b2;--tx:#dbe3f2;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--accent:#60a5fa}
-    body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:900px;margin:24px auto;padding:16px}
-    h1{font-size:20px;margin:0 0 12px}
-    p{color:var(--muted);margin:8px 0 16px}
+    :root{
+      --bg:#0b0f16;--card:#111827;--muted:#9aa3b2;--tx:#dbe3f2;
+      --ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--accent:#60a5fa
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--tx);
+      font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{max-width:940px;margin:28px auto;padding:16px}
+    h1{font-size:22px;margin:0 0 6px}
+    p{color:var(--muted);margin:6px 0 16px}
     .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:16px}
     .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-    .btn{appearance:none;border:1px solid #2a3b53;background:#0f172a;color:var(--tx);padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn{appearance:none;border:1px solid #2a3b53;background:#0f172a;color:var(--tx);
+      padding:10px 14px;border-radius:10px;cursor:pointer;transition:.15s}
     .btn:hover{border-color:#3b82f6}
     .btn.primary{background:#0b2a52;border-color:#1d4ed8}
     .btn.primary:hover{background:#0a3a78}
     .btn.small{padding:6px 10px;font-size:12px}
     input[type=file]{display:none}
     label.file{border:1px dashed #3b475b;border-radius:10px;padding:12px 14px;cursor:pointer;color:var(--muted)}
-    .log{max-height:360px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220}
+    .log{max-height:380px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220}
     .item{display:flex;align-items:flex-start;gap:10px;padding:10px;border-bottom:1px solid #142036}
     .item:last-child{border-bottom:0}
     .badge{font-size:11px;padding:2px 8px;border-radius:999px}
@@ -29,41 +35,63 @@
     code{background:#0b1323;border:1px solid #1f2a42;padding:2px 6px;border-radius:6px}
     .hint{font-size:12px;color:var(--muted)}
     .grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
-    .regex{width:100%;background:#0b1323;border:1px solid #1f2a42;color:var(--tx);padding:8px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+    .regex{width:100%;background:#0b1323;border:1px solid #1f2a42;color:var(--tx);
+      padding:8px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* ===== Loader "aguantá flaca" ===== */
+    .loader-backdrop{
+      position:fixed;inset:0;background:rgba(8,12,20,.82);backdrop-filter: blur(2px);
+      display:none;align-items:center;justify-content:center;z-index:9999
+    }
+    .loader{
+      display:flex;flex-direction:column;gap:14px;align-items:center;
+      background:#0e1729;border:1px solid #21314f;border-radius:16px;padding:24px 28px;
+      box-shadow:0 8px 40px rgba(0,0,0,.35)
+    }
+    .spinner{
+      width:46px;height:46px;border-radius:50%;
+      border:4px solid #30415f;border-top-color:#8ab4ff;animation:spin 1s linear infinite
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loader h2{margin:0;font-size:16px}
+    .loader p{margin:0;font-size:13px;color:#97a5bd}
   </style>
-  <!-- pdf.js / JSZip / FileSaver (sin servidor) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha512-zNoF0GzF9DzOnGQp0Q7w0Xy4SL8m0m3ECY2rXyK2+VMG2r0c8tS0qGx2XhC4f6j3x1H0dTt6smD6c4uM1iJ8Tg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-WR0s5xVxQXrDaZ3lqzxbzH5l8K4w0d3H3w2lOVb6a7h9rZ4QJ5q2yoeQe2qU5C1s0ZxC7h9kKQ7Jtq2w2iBqOQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js" integrity="sha512-5x3JQj0g3dZzvQn6e2J3xQ2k3d1n1mFzG0cQYb3dP4v7pS9fVd0q9Zp8xK3C9w4y2m0G8p3xV8c7Pz5i7l0wNA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- librerías client-side (no hay servidor) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Renombrar Facturas PDF (Cliente + Número)</h1>
-    <p>Cargá varios PDFs, detectamos <em>Cliente</em> y <em>Número</em> y te bajamos un .zip con los archivos renombrados en el formato <code>Cliente - 0001-00001234.pdf</code>. Todo corre <strong>en tu navegador</strong> (no sube nada a ningún servidor).</p>
+  <!-- LOADER -->
+  <div class="loader-backdrop" id="loader">
+    <div class="loader" role="alert" aria-live="assertive">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2>aguantá flaca, se está procesando…</h2>
+      <p>No cierres esta pestaña. Si hay muchos PDFs puede tardar un toque.</p>
+    </div>
+  </div>
 
+  <div class="wrap">
+    <h1>Renombrar Facturas PDF (Cliente + Nro)</h1>
+    <p>Subí varios PDFs; detectamos <em>Cliente</em> y <em>Nro</em> y te bajamos un .zip con los archivos renombrados: <code>Cliente - 4444-00652748.pdf</code>. Todo sucede <strong>en tu navegador</strong>.</p>
+
+    <!-- Patrones -->
     <div class="card" style="margin-bottom:12px">
       <div class="grid">
-        <div>
-          <div class="hint">Patrones de búsqueda (podés ajustarlos si tu formato es distinto)</div>
-        </div>
+        <div><div class="hint">Patrones (podés ajustarlos). Se usa la <em>primera coincidencia</em> de cada grupo.</div></div>
         <button class="btn small" id="resetPat">Restaurar</button>
       </div>
-      <div class="hint" style="margin-top:6px">Se toma la <em>primera coincidencia</em> de cada grupo. Línea 1 del match, sin dos puntos/guiones.</div>
       <div style="margin-top:10px;display:grid;gap:8px">
-        <label>Cliente (regex, grupo <code>?&lt;cliente&gt;</code>)</label>
-        <textarea id="reCliente" class="regex" rows="4">(?:?i)\bcliente\s*:\s*(?P&lt;cliente&gt;.+)
-(?:?i)\bsr(?:es)?\.\s*:\s*(?P&lt;cliente&gt;.+)
-(?:?i)raz[oó]n\s+social\s*:\s*(?P&lt;cliente&gt;.+)
-(?:?i)\bnombre\s+cliente\s*:\s*(?P&lt;cliente&gt;.+)</textarea>
+        <label>Cliente (regex con grupo <code>?&lt;cliente&gt;</code>)</label>
+        <textarea id="reCliente" class="regex" rows="4"></textarea>
 
-        <label>Número de factura (regex, grupo <code>?&lt;num&gt;</code>)</label>
-        <textarea id="reNumero" class="regex" rows="5">(?:?i)\bfactura\s*[ABC]?\s*(?:n[°º]|nro\.?|num(?:ero)?\.?)?\s*[:#-]?\s*(?P&lt;num&gt;\d{4}\s*[-]\s*\d{4,8})
-(?:?i)\bcomprobante\s*(?:n[°º]|nro\.?|num(?:ero)?\.?)?\s*[:#-]?\s*(?P&lt;num&gt;\d{4}\s*[-]\s*\d{4,8})
-(?:?i)\bnota\s+de\s+cr[eé]dito\s*(?:n[°º]|nro\.?|num(?:ero)?\.?)?\s*[:#-]?\s*(?P&lt;num&gt;\d{4}\s*[-]\s*\d{4,8})
-(?:?i)\bn[°º]\s*(?P&lt;num&gt;\d{4}\s*[-]\s*\d{4,8})</textarea>
+        <label>Número de factura (regex con grupo <code>?&lt;num&gt;</code>)</label>
+        <textarea id="reNumero" class="regex" rows="4"></textarea>
       </div>
     </div>
 
+    <!-- Acciones -->
     <div class="card" style="margin-bottom:12px">
       <div class="row">
         <label class="file">
@@ -75,6 +103,7 @@
       </div>
     </div>
 
+    <!-- Resultados -->
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <strong>Resultados</strong>
@@ -85,45 +114,45 @@
   </div>
 
   <script>
-    // ===== Helpers UI =====
+    // ====== UI helpers ======
     const $ = s => document.querySelector(s);
-    const logEl = $('#log');
-    const statusEl = $('#status');
-    const sumEl = $('#summary');
-    const runBtn = $('#runBtn');
-    const inp = $('#fileInput');
-    const reClienteTA = $('#reCliente');
-    const reNumeroTA = $('#reNumero');
-    const resetPat = $('#resetPat');
+    const logEl = $('#log'), statusEl = $('#status'), sumEl = $('#summary');
+    const runBtn = $('#runBtn'), inp = $('#fileInput'), loader = $('#loader');
+    const reClienteTA = $('#reCliente'), reNumeroTA = $('#reNumero'), resetPat = $('#resetPat');
 
-    const DEFAULT_CLIENTE = `(??i)\\bcliente\\s*:\\s*(?P<cliente>.+)
-(??i)\\bsr(?:es)?\\.\\s*:\\s*(?P<cliente>.+)
-(??i)raz[oó]n\\s+social\\s*:\\s*(?P<cliente>.+)
-(??i)\\bnombre\\s+cliente\\s*:\\s*(?P<cliente>.+)`;
+    // Defaults afinados a tu layout (imagen de ejemplo)
+    const DEFAULT_CLIENTE = [
+      '(?i)^\\s*Cliente\\s+(?P<cliente>[^\\r\\n]+)',
+      '(?i)^\\s*Sres?\\.?\\s*:\\s*(?P<cliente>[^\\r\\n]+)',
+      '(?i)^\\s*Raz[oó]n\\s+Social\\s*:\\s*(?P<cliente>[^\\r\\n]+)'
+    ].join('\\n');
 
-    const DEFAULT_NUMERO = `(??i)\\bfactura\\s*[ABC]?\\s*(?:n[°º]|nro\\.?|num(?:ero)?\\.?)?\\s*[:#-]?\\s*(?P<num>\\d{4}\\s*[-]\\s*\\d{4,8})
-(??i)\\bcomprobante\\s*(?:n[°º]|nro\\.?|num(?:ero)?\\.?)?\\s*[:#-]?\\s*(?P<num>\\d{4}\\s*[-]\\s*\\d{4,8})
-(??i)\\bnota\\s+de\\s+cr[eé]dito\\s*(?:n[°º]|nro\\.?|num(?:ero)?\\.?)?\\s*[:#-]?\\s*(?P<num>\\d{4}\\s*[-]\\s*\\d{4,8})
-(??i)\\bn[°º]\\s*(?P<num>\\d{4}\\s*[-]\\s*\\d{4,8})`;
+    const DEFAULT_NUMERO = [
+      '(?i)^\\s*Nro\\.?\\s*:\\s*(?P<num>\\d{4}\\s*-\\s*\\d{6,8})',
+      '(?i)^\\s*Factura\\s*[ABC]?\\s*(?:N[°º]|Nro\\.?)\\s*:\\s*(?P<num>\\d{4}\\s*-\\s*\\d{6,8})'
+    ].join('\\n');
 
-    // Arreglo para mantener archivos seleccionados
+    // Estado de archivos
     let files = [];
-
     inp.addEventListener('change', () => {
       files = Array.from(inp.files || []);
       runBtn.disabled = files.length === 0;
       sumEl.textContent = files.length ? `${files.length} archivos seleccionados` : '';
-      logEl.innerHTML = '';
-      statusEl.textContent = '';
+      logEl.innerHTML = ''; statusEl.textContent = '';
     });
 
     resetPat.addEventListener('click', () => {
-      reClienteTA.value = DEFAULT_CLIENTE.replaceAll('(??i)', '(?i)');
-      reNumeroTA.value  = DEFAULT_NUMERO.replaceAll('(??i)', '(?i)');
+      reClienteTA.value = DEFAULT_CLIENTE;
+      reNumeroTA.value  = DEFAULT_NUMERO;
     });
 
-    // ===== Lógica: pdf.js =====
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    // Inicializa defaults al abrir
+    reClienteTA.value = DEFAULT_CLIENTE;
+    reNumeroTA.value  = DEFAULT_NUMERO;
+
+    // ===== pdf.js =====
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     async function pdfToText(file) {
       const buf = await file.arrayBuffer();
@@ -133,49 +162,40 @@
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const txt = await page.getTextContent();
-        const line = txt.items.map(it => it.str).join(' ');
-        out.push(line);
+        // concatenamos textos en una "línea" por página
+        out.push(txt.items.map(it => it.str).join(' '));
       }
       return out.join('\n');
     }
 
-    // ===== Regex helpers =====
-    function compilePatterns(multiline, groupName) {
-      // Split lines into separate regexes; support (?i) inline flag
+    // ===== Regex =====
+    function compilePatterns(multiline) {
       const lines = multiline.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       const regs = [];
       for (const line of lines) {
-        // Convert JS inline (?i) to flag 'i' on the RegExp
         const hasCaseI = line.startsWith('(?i)');
         const pattern = hasCaseI ? line.replace('(?i)', '') : line;
-        try {
-          regs.push(new RegExp(pattern, hasCaseI ? 'i' : ''));
-        } catch (e) {
-          console.warn('Regex inválida:', line, e);
-        }
+        try { regs.push(new RegExp(pattern, hasCaseI ? 'i' : '')); }
+        catch(e){ console.warn('Regex inválida:', line, e); }
       }
       return regs;
     }
-
     function firstMatch(text, regs, groupName) {
       for (const r of regs) {
         const m = r.exec(text);
         if (m) {
-          // soportar named groups si están, o group 1 si no
-          let val = m.groups && m.groups[groupName] ? m.groups[groupName] : (m[1] || '');
-          val = (val || '').split(/\r?\n/)[0].trim().replace(/^[-:\s]+/, '');
+          let val = (m.groups && m.groups[groupName]) ? m.groups[groupName] : (m[1] || '');
+          val = (val || '').split(/\r?\n/)[0].trim().replace(/^[-:\\s]+/, '');
           if (val) return val;
         }
       }
       return null;
     }
-
-    function sanitize(name, maxLen=80) {
+    function sanitize(name, maxLen=100) {
       let s = name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
       if (s.length > maxLen) s = s.slice(0, maxLen).trim();
       return s;
     }
-
     function logRow(type, original, message) {
       const div = document.createElement('div');
       div.className = 'item';
@@ -184,20 +204,20 @@
       badge.textContent = type === 'ok' ? 'OK' : type === 'skip' ? 'SIN CAMBIOS' : 'ERROR';
       const content = document.createElement('div');
       content.innerHTML = `<div><strong>${original}</strong></div><div class="hint">${message}</div>`;
-      div.appendChild(badge);
-      div.appendChild(content);
-      logEl.appendChild(div);
-      logEl.scrollTop = logEl.scrollHeight;
+      div.appendChild(badge); div.appendChild(content);
+      logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
     }
 
+    // ===== Proceso =====
     async function processAll() {
-      runBtn.disabled = true;
-      logEl.innerHTML = '';
-      statusEl.textContent = 'Leyendo PDFs…';
-      sumEl.textContent = '';
+      if (!files.length) return;
 
-      const cliRegs = compilePatterns(reClienteTA.value, 'cliente');
-      const numRegs = compilePatterns(reNumeroTA.value, 'num');
+      // Loader ON
+      loader.style.display = 'flex';
+      runBtn.disabled = true; logEl.innerHTML = ''; statusEl.textContent = 'Leyendo PDFs…'; sumEl.textContent = '';
+
+      const cliRegs = compilePatterns(reClienteTA.value);
+      const numRegs = compilePatterns(reNumeroTA.value);
       let ok = 0, fail = 0;
 
       const zip = new JSZip();
@@ -209,22 +229,15 @@
           const numero  = firstMatch(text, numRegs, 'num');
 
           if (!cliente || !numero) {
-            fail++;
-            logRow('skip', f.name, 'No se pudo extraer cliente y/o número');
+            fail++; logRow('skip', f.name, 'No se pudo extraer Cliente y/o Nro');
             continue;
           }
-
           const newName = `${sanitize(cliente)} - ${sanitize(numero)}.pdf`;
-
-          // Agregar al zip
           const buf = await f.arrayBuffer();
           zip.file(newName, buf);
-          ok++;
-          logRow('ok', f.name, `→ ${newName}`);
-
+          ok++; logRow('ok', f.name, `→ ${newName}`);
         } catch (e) {
-          fail++;
-          logRow('err', f.name, String(e));
+          fail++; logRow('err', f.name, String(e));
         }
       }
 
@@ -240,14 +253,12 @@
         statusEl.textContent = 'Sin archivos renombrados.';
       }
 
+      // Loader OFF
+      loader.style.display = 'none';
       runBtn.disabled = files.length === 0;
     }
 
     runBtn.addEventListener('click', processAll);
-
-    // Poner defaults la primera vez
-    if(!reClienteTA.value.trim()) reClienteTA.value = DEFAULT_CLIENTE.replaceAll('(??i)','(?i)');
-    if(!reNumeroTA.value.trim())  reNumeroTA.value  = DEFAULT_NUMERO.replaceAll('(??i)','(?i)');
   </script>
 </body>
 </html>
