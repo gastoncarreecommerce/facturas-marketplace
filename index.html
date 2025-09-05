@@ -25,7 +25,7 @@
     .btn.small{padding:6px 10px;font-size:12px}
     input[type=file]{display:none}
     label.file{border:1px dashed #3b475b;border-radius:10px;padding:12px 14px;cursor:pointer;color:var(--muted)}
-    .log{max-height:380px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220}
+    .log{max-height:380px;overflow:auto;border:1px solid #1f2937;border-radius:10px;padding:12px;background:#0c1220;white-space:normal}
     .item{display:flex;align-items:flex-start;gap:10px;padding:10px;border-bottom:1px solid #142036}
     .item:last-child{border-bottom:0}
     .badge{font-size:11px;padding:2px 8px;border-radius:999px}
@@ -37,6 +37,7 @@
     .grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
     .regex{width:100%;background:#0b1323;border:1px solid #1f2a42;color:var(--tx);
       padding:8px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
 
     /* ===== Loader "aguantá flaca" ===== */
     .loader-backdrop{
@@ -55,10 +56,12 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .loader h2{margin:0;font-size:16px}
     .loader p{margin:0;font-size:13px;color:#97a5bd}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
   </style>
 
-  <!-- librerías client-side (no hay servidor) -->
+  <!-- librerías client-side -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
@@ -74,17 +77,20 @@
 
   <div class="wrap">
     <h1>Renombrar Facturas PDF (Cliente + Nro)</h1>
-    <p>Subí varios PDFs; detectamos <em>Cliente</em> y <em>Nro</em> y te bajamos un .zip con los archivos renombrados: <code>Cliente - 4444-00652748.pdf</code>. Todo sucede <strong>en tu navegador</strong>.</p>
+    <p>Subí varios PDFs; detectamos <em>Cliente</em> y <em>Nro</em> y te bajamos un .zip con nombres <code>Cliente - 4444-00652748.pdf</code>. Todo sucede <strong>en tu navegador</strong>.</p>
 
     <!-- Patrones -->
     <div class="card" style="margin-bottom:12px">
       <div class="grid">
         <div><div class="hint">Patrones (podés ajustarlos). Se usa la <em>primera coincidencia</em> de cada grupo.</div></div>
-        <button class="btn small" id="resetPat">Restaurar</button>
+        <div class="toolbar">
+          <button class="btn small" id="resetPat">Restaurar</button>
+          <button class="btn small" id="toggleDebug">Ver texto extraído</button>
+        </div>
       </div>
       <div style="margin-top:10px;display:grid;gap:8px">
         <label>Cliente (regex con grupo <code>?&lt;cliente&gt;</code>)</label>
-        <textarea id="reCliente" class="regex" rows="4"></textarea>
+        <textarea id="reCliente" class="regex" rows="5"></textarea>
 
         <label>Número de factura (regex con grupo <code>?&lt;num&gt;</code>)</label>
         <textarea id="reNumero" class="regex" rows="4"></textarea>
@@ -110,6 +116,10 @@
         <span class="hint" id="summary"></span>
       </div>
       <div id="log" class="log" aria-live="polite"></div>
+      <details id="debugBox" style="margin-top:10px;display:none">
+        <summary class="hint">Texto extraído (primero de la lista)</summary>
+        <pre id="debugText" class="mono"></pre>
+      </details>
     </div>
   </div>
 
@@ -119,17 +129,22 @@
     const logEl = $('#log'), statusEl = $('#status'), sumEl = $('#summary');
     const runBtn = $('#runBtn'), inp = $('#fileInput'), loader = $('#loader');
     const reClienteTA = $('#reCliente'), reNumeroTA = $('#reNumero'), resetPat = $('#resetPat');
+    const debugBox = $('#debugBox'), debugText = $('#debugText'), toggleDebug = $('#toggleDebug');
 
-    // Defaults afinados a tu layout (imagen de ejemplo)
+    toggleDebug.addEventListener('click', () => {
+      debugBox.style.display = debugBox.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // Defaults afinados (cortan antes de IVA/Domicilio/CUIT si vienen pegados)
     const DEFAULT_CLIENTE = [
-      '(?i)^\\s*Cliente\\s+(?P<cliente>[^\\r\\n]+)',
-      '(?i)^\\s*Sres?\\.?\\s*:\\s*(?P<cliente>[^\\r\\n]+)',
-      '(?i)^\\s*Raz[oó]n\\s+Social\\s*:\\s*(?P<cliente>[^\\r\\n]+)'
+      '(?i)\\bCliente\\b[:\\s]+(?P<cliente>.+?)(?=\\s+(?:IVA:|Domicilio:|CUIT[:\\s]|C\\.U\\.I\\.T\\.:)|$)',
+      '(?i)\\bSres?\\.?\\b[:\\s]+(?P<cliente>[^\\r\\n]+)',
+      '(?i)Raz[oó]n\\s+Social[:\\s]+(?P<cliente>[^\\r\\n]+)'
     ].join('\\n');
 
     const DEFAULT_NUMERO = [
-      '(?i)^\\s*Nro\\.?\\s*:\\s*(?P<num>\\d{4}\\s*-\\s*\\d{6,8})',
-      '(?i)^\\s*Factura\\s*[ABC]?\\s*(?:N[°º]|Nro\\.?)\\s*:\\s*(?P<num>\\d{4}\\s*-\\s*\\d{6,8})'
+      '(?i)\\bN(?:ro|[°º])\\.?\\b[:\\s]+(?P<num>\\d{4}\\s*[-–—]\\s*\\d{6,10})',
+      '(?i)\\bFactura\\s*[ABC]?\\s*(?:N(?:ro|[°º])\\.?)?\\s*[:\\s]+(?P<num>\\d{4}\\s*[-–—]\\s*\\d{6,10})'
     ].join('\\n');
 
     // Estado de archivos
@@ -138,7 +153,7 @@
       files = Array.from(inp.files || []);
       runBtn.disabled = files.length === 0;
       sumEl.textContent = files.length ? `${files.length} archivos seleccionados` : '';
-      logEl.innerHTML = ''; statusEl.textContent = '';
+      logEl.innerHTML = ''; statusEl.textContent = ''; debugText.textContent = ''; debugBox.style.display='none';
     });
 
     resetPat.addEventListener('click', () => {
@@ -154,18 +169,32 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    async function pdfToText(file) {
+    // Estrategia A: concatenar ítems
+    async function pdfToText_A(file) {
       const buf = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument({ data: buf });
-      const pdf = await loadingTask.promise;
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
       let out = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const txt = await page.getTextContent();
-        // concatenamos textos en una "línea" por página
         out.push(txt.items.map(it => it.str).join(' '));
       }
       return out.join('\n');
+    }
+
+    // Estrategia B: forzar saltos antes de anclas típicas
+    function massageTextForAnchors(text) {
+      const anchors = ['IVA:', 'Domicilio:', 'CUIT', 'C.U.I.T.:', 'Cta.:', 'Fecha:', 'Nro', 'N°', 'Nº'];
+      const re = new RegExp('(?:\\s+)(' + anchors.map(a => a.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')).join('|') + ')','g');
+      return text.replace(re, '\n$1');
+    }
+
+    async function pdfToText(file) {
+      // A
+      let text = await pdfToText_A(file);
+      // B (plan B “permisivo”)
+      const textB = massageTextForAnchors(text);
+      return {textA: text, textB};
     }
 
     // ===== Regex =====
@@ -219,14 +248,32 @@
       const cliRegs = compilePatterns(reClienteTA.value);
       const numRegs = compilePatterns(reNumeroTA.value);
       let ok = 0, fail = 0;
-
       const zip = new JSZip();
+
+      let firstDebugDumped = false;
 
       for (const f of files) {
         try {
-          const text = await pdfToText(f);
-          const cliente = firstMatch(text, cliRegs, 'cliente');
-          const numero  = firstMatch(text, numRegs, 'num');
+          const {textA, textB} = await pdfToText(f);
+
+          // Primero intentamos contra textB (con anclas y saltos)
+          let cliente = firstMatch(textB, cliRegs, 'cliente');
+          let numero  = firstMatch(textB, numRegs, 'num');
+
+          // Fallback: probamos también contra textA “crudo”
+          if (!cliente || !numero) {
+            const c2 = firstMatch(textA, cliRegs, 'cliente');
+            const n2 = firstMatch(textA, numRegs, 'num');
+            cliente = cliente || c2;
+            numero  = numero  || n2;
+          }
+
+          // Dump de debug del primer archivo procesado
+          if (!firstDebugDumped) {
+            debugText.textContent = `=== Texto (con anclas) ===\n${textB}\n\n=== Texto (crudo) ===\n${textA}`;
+            debugBox.style.display = 'block';
+            firstDebugDumped = true;
+          }
 
           if (!cliente || !numero) {
             fail++; logRow('skip', f.name, 'No se pudo extraer Cliente y/o Nro');
